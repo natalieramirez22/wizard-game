@@ -55,7 +55,7 @@ void drawDialogue(String message) {
 
   // draw text
   fill(255);
-  textSize(24);
+  textSize(32);
   textAlign(LEFT, TOP);
   
   String visiblePart = currText.substring(0, displayIndex);
@@ -89,25 +89,25 @@ void drawNoiseFlash() {
 void setup() {
   // set screen
   fullScreen();
-  bg = loadImage("wizard_room.png");
+  bg = loadImage("wizard_school_new.png");
   bg.resize(width, height);
   
   // draw initial sprites
-  wizardProf = loadImage("wizard_professor-export.png");
-  wizardStudent = loadImage("wizard_student_match.png");
-  wizardProf.resize(width/2, height/2);
-  wizardStudent.resize(width/2, height/2);
+  wizardProf = loadImage("wizard_professor.png");
+  wizardStudent = loadImage("apprentice.png");
+  wizardProf.resize(0, height/3);
+  wizardStudent.resize(0, height/2);
 }
 
 void draw() {
   image(bg, 0, 0);
   if (storyState == 0) {
-    image(wizardProf, width/2, 300);
-    image(wizardStudent, 50, 325);
+    image(wizardProf, width/2 - 30, 390);
+    image(wizardStudent, 60, 350);
     
     initialScene();
   } else if (storyState == 1) {
-    //drawNoiseFlash();
+    drawNoiseFlash();
     //spellTest();
     storyState = 2; 
   } else if (storyState == 2) {
