@@ -61,12 +61,12 @@ class CatNPC {
     }
   }
 
-  void reactToClick() {
+  void reactToHover() {
     reactionText = random(1) < 0.5 ? "purr..." : "mew!";
     reactionStartTime = millis();
 
-    x += random(-20, 20);
-    y += random(-10, 10);
+    x += random(-8, 8);
+    y += random(-4, 4);
   }
 
   boolean isMouseOver() {

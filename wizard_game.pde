@@ -1,32 +1,42 @@
-/* 
-  Exercise 5: Processing Hackathon (PAT 204)
+// Wizard Video Game for Processing Hackathon
 
-  STORY FLOW (as requested):
-  storyState 0: schoolBg + apprentice + professor + cat + intro dialogue
-  storyState 1: spellBg + apprentice only + status panel (no cat/professor)
-  storyState 2: schoolBg + apprentice + professor + cat + level-up dialogue
-  storyState 3: battleBg + apprentice only + status panel (no cat/professor)
-  storyState 4: schoolBg + apprentice + professor + cat + final success/fail message (placeholder)
-
-  NOTES:
-  - Background bug + trails were caused by imageMode(CENTER) carrying over from sprite drawing.
-  - This main file forces imageMode(CORNER) before drawing backgrounds every frame.
-*/
-
-// -------------------- IMAGES --------------------
+// images
 PImage schoolBg, spellBg, battleBg;
-PImage profSprite, studentSprite, catSprite;
+PImage profSprite, studentSprite, catSprite, orbSprite;
 
-// -------------------- STORY VARS --------------------
+// story vars
 int storyState = 0;
 int flashStartTime = 0;
 
-// -------------------- DIALOGUE VARS --------------------
+// dialogue vars
 String currText = "";
 int displayIndex = 0;
 long lastUpdateTime = 0;
 int typingSpeed = 55;
 int dialogueIndex = 0;
+
+// cat hover interaction
+boolean mouseWasOverCat = false;
+int catHoverCooldownMs = 600;
+int lastCatHoverReactTime = -99999;
+
+// battle (storyState 3)
+ArrayList<SpellOrb> orbs = new ArrayList<SpellOrb>();
+
+int health = 5;
+int maxHealth = 5;
+int destroyedOrbs = 0;
+int destroyGoal = 50;
+int lastSpawnTime = 0;
+int spawnIntervalMs = 420;
+int minSpawnIntervalMs = 140;
+char lastOrbLetter = '?';
+boolean battleStarted = false;
+boolean battlePassed = false;
+
+// red hit flash
+int hitFlashStart = 0;
+int hitFlashDuration = 220;
 
 String[] introLines = {
   "Welcome to the wizarding school!",
@@ -45,15 +55,15 @@ String[] endingLines = {
   "Final scene: you failed... (replace later)"
 };
 
-// -------------------- FLASH VARS --------------------
+// flash vars
 int flashDuration = 900;
 
-// -------------------- CHARACTERS (CLASSES) --------------------
+// characters (classes)
 Wizard professor;
 Wizard apprentice;
 CatNPC cat;
 
-// -------------------- SETUP --------------------
+// setup
 void setup() {
   fullScreen();
   textFont(createFont("Arial", 32));
@@ -71,6 +81,7 @@ void setup() {
   profSprite = loadImage("wizard_professor.png");
   studentSprite = loadImage("apprentice.png");
   catSprite = loadImage("cat.png"); // make sure cat.png exists
+  orbSprite = loadImage("dark_orb.png");
 
   // create wizard objects
   professor = new Wizard(
@@ -79,7 +90,7 @@ void setup() {
     width/2 + 250,
     height * 0.62,
     height/3
-  );
+    );
 
   apprentice = new Wizard(
     "Apprentice",
@@ -87,7 +98,7 @@ void setup() {
     200,
     height * 0.66,
     height/2
-  );
+    );
 
   // player stats (used in storyState 1 and 3)
   apprentice.mana = 100;
@@ -97,15 +108,10 @@ void setup() {
   cat = new CatNPC(catSprite, width * 0.55, height * 0.72);
 }
 
-// -------------------- DRAW LOOP --------------------
+// draw
 void draw() {
-  // 1) ALWAYS draw background first (and force CORNER mode)
   drawSceneBackground();
-
-  // 2) flash overlay if active
   drawNoiseFlashIfActive();
-
-  // 3) draw characters based on story state (exactly how you described)
 
   // storyState 0: school, all characters, intro dialogue
   if (storyState == 0) {
@@ -114,6 +120,7 @@ void draw() {
 
     cat.update();
     cat.display();
+    handleCatHoverReaction();
 
     initialScene();
   }
@@ -132,6 +139,7 @@ void draw() {
 
     cat.update();
     cat.display();
+    handleCatHoverReaction();
 
     levelUpScene();
   }
@@ -139,8 +147,15 @@ void draw() {
   // storyState 3: battle scene (apprentice only + stats)
   else if (storyState == 3) {
     apprentice.display();
-    apprentice.drawStatusPanel();   // player UI only here
-    drawDialogue("The battle begins now!");
+    drawHealthBar();
+    
+    if (!battleStarted) {
+      drawDialogue("Final Test: Chamber of Judgment.\nType the letter on each orb before it reaches you.");
+    } else {
+      runBattleGame();
+      drawBattleOverlay();
+      drawHitFlash();
+    }
   }
 
   // storyState 4: final school scene (all characters, ending message)
@@ -150,30 +165,29 @@ void draw() {
 
     cat.update();
     cat.display();
+    handleCatHoverReaction();
 
     endingScene();
   }
 }
 
-// -------------------- BACKGROUND DRAW (FIXES CORNER BUG + TRAILS) --------------------
+// background draw
 void drawSceneBackground() {
   imageMode(CORNER); // critical: backgrounds must use CORNER
 
   if (storyState == 1) {
     if (spellBg != null) image(spellBg, 0, 0, width, height);
     else background(30);
-  } 
-  else if (storyState == 3) {
+  } else if (storyState == 3) {
     if (battleBg != null) image(battleBg, 0, 0, width, height);
     else background(20);
-  } 
-  else {
+  } else {
     if (schoolBg != null) image(schoolBg, 0, 0, width, height);
     else background(10);
   }
 }
 
-// -------------------- STORY DIALOGUE HELPERS --------------------
+// story helpers
 void initialScene() {
   if (dialogueIndex < introLines.length) {
     drawDialogue(introLines[dialogueIndex]);
@@ -192,11 +206,14 @@ void levelUpScene() {
 }
 
 void endingScene() {
-  // placeholder ending (you’ll replace with pass/fail logic later)
-  drawDialogue("Final scene placeholder: success/fail goes here.");
+  if (battlePassed) {
+    drawDialogue("You did it.\nYou are a worthy wizard."); 
+  } else {
+    drawDialogue("The chamber rejects you...\nTry again."); 
+  }
 }
 
-// -------------------- DIALOGUE BOX --------------------
+// dialogue box
 void drawDialogue(String message) {
   if (!message.equals(currText)) {
     currText = message;
@@ -229,7 +246,7 @@ void drawDialogue(String message) {
   text(visiblePart, x + 30, y + 30, boxWidth - 60, boxHeight - 60);
 }
 
-// -------------------- FLASH OVERLAY --------------------
+// flash overlay
 void triggerFlash() {
   flashStartTime = millis();
 }
@@ -255,15 +272,8 @@ void drawNoiseFlashIfActive() {
   rect(0, 0, width, height);
 }
 
-// -------------------- INPUT --------------------
+// input
 void mousePressed() {
-  // cat interaction ONLY when cat exists in the scene
-  if (storyState == 0 || storyState == 2 || storyState == 4) {
-    if (cat.isMouseOver()) {
-      cat.reactToClick();
-    }
-  }
-
   // dialogue click-to-advance
   if (displayIndex < currText.length()) {
     skipTyping();
@@ -278,33 +288,209 @@ void mousePressed() {
       triggerFlash();
       dialogueIndex = 0;
     }
-  }
-  else if (storyState == 1) {
+  } else if (storyState == 1) {
     // for now, click moves to level-up dialogue scene
     storyState = 2;
     triggerFlash();
     dialogueIndex = 0;
-  }
-  else if (storyState == 2) {
+  } else if (storyState == 2) {
     dialogueIndex++;
     if (dialogueIndex >= levelUpLines.length) {
       storyState = 3;
       triggerFlash();
       dialogueIndex = 0;
+      battleStarted = false;
     }
-  }
-  else if (storyState == 3) {
-    // placeholder: after battle, go to final scene
-    storyState = 4;
-    triggerFlash();
-    dialogueIndex = 0;
-  }
-  else if (storyState == 4) {
+  } else if (storyState == 3) {
+    if (!battleStarted) {
+      if (displayIndex < currText.length()) {
+        skipTyping(); 
+      } else {
+        startBattle(); 
+      }
+    }
+    return; // prevent advancing to storyState 4 on click
+  } else if (storyState == 4) {
     // final scene: you can later lock this or restart
   }
 }
 
+void keyPressed() {
+  if (storyState != 3 || !battleStarted) return;
+
+  char typed = Character.toUpperCase(key);
+
+  int bestIndex = -1;
+  float bestDist = Float.MAX_VALUE;
+
+  for (int i = 0; i < orbs.size(); i++) {
+    SpellOrb o = orbs.get(i);
+    if (o.letter != typed) continue;
+
+    float d = dist(o.x, o.y, apprentice.x, apprentice.y);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIndex = i;
+    }
+  }
+
+  if (bestIndex != -1) {
+    orbs.get(bestIndex).destroyed = true;
+  }
+}
+
+
+// more helpers
 void skipTyping() {
   displayIndex = currText.length();
   lastUpdateTime = millis() - (currText.length() * typingSpeed);
+}
+
+void handleCatHoverReaction() {
+  // only allow hover interaction in states where the cat exists
+  if (!(storyState == 0 || storyState == 2 || storyState == 4)) return;
+
+  boolean mouseOverCat = cat.isMouseOver();
+
+  // trigger only when mouse ENTERS the cat area (not every frame)
+  boolean mouseJustEntered = mouseOverCat && !mouseWasOverCat;
+
+  // optional cooldown so repeated in/out doesn't spam
+  boolean cooldownDone = (millis() - lastCatHoverReactTime) > catHoverCooldownMs;
+
+  if (mouseJustEntered && cooldownDone) {
+    cat.reactToHover(); // <- you’ll add this method in CatNPC
+    lastCatHoverReactTime = millis();
+  }
+
+  mouseWasOverCat = mouseOverCat;
+}
+
+void startBattle() {
+  orbs.clear();
+  destroyedOrbs = 0;
+
+  health = maxHealth;
+  battlePassed = false;
+  battleStarted = true;
+
+  lastSpawnTime = millis();
+  spawnIntervalMs = 420;
+}
+
+void runBattleGame() {
+  // spawn
+  if (millis() - lastSpawnTime > spawnIntervalMs) {
+    spawnOrb();
+    lastSpawnTime = millis();
+    spawnIntervalMs = max(minSpawnIntervalMs, spawnIntervalMs - 50); // ramp difficulty
+  }
+
+  // update/draw orbs
+  for (int i = orbs.size() - 1; i >= 0; i--) {
+    SpellOrb o = orbs.get(i);
+    o.update();
+    o.display();
+
+    if (o.hits(apprentice.x, apprentice.y)) {
+      takeDamage();
+      orbs.remove(i);
+      continue;
+    }
+
+    if (o.destroyed) {
+      destroyedOrbs++;
+      orbs.remove(i);
+    }
+  }
+
+  // win/lose
+  if (health <= 0) {
+    battlePassed = false;
+    battleStarted = false;
+    storyState = 4;
+    triggerFlash();
+  } else if (destroyedOrbs >= destroyGoal) {
+    battlePassed = true;
+    battleStarted = false;
+    storyState = 4;
+    triggerFlash();
+  }
+}
+
+void spawnOrb() {
+  char c = char(int(random(26)) + 'A'); // A-Z
+  while (c == lastOrbLetter) { // prevent A spam
+    c = char(int(random(26)) + 'A'); 
+  }
+  lastOrbLetter = c;
+
+  float startX = width + 80;
+  float startY = random(height * 0.35, height * 0.80);
+
+  float speed = map(spawnIntervalMs, 420, minSpawnIntervalMs, 6.5, 12.5);
+  speed = constrain(speed, 6.0, 13.0);
+
+  orbs.add(new SpellOrb(orbSprite, c, startX, startY, speed));
+}
+
+void takeDamage() {
+  health--;
+  hitFlashStart = millis();
+}
+
+void drawHealthBar() {
+  float pad = 24;
+  float panelW = 280;
+  float panelH = 90;
+  float x = width - panelW - pad;
+  float y = pad;
+
+  fill(0, 0, 0, 170);
+  stroke(255);
+  strokeWeight(2);
+  rect(x, y, panelW, panelH, 10);
+
+  fill(255);
+  textAlign(LEFT, TOP);
+  textSize(22);
+  text("Health", x + 16, y + 14);
+
+  float barX = x + 16;
+  float barY = y + 48;
+  float barW = panelW - 32;
+  float barH = 18;
+
+  noStroke();
+  fill(255, 255, 255, 70);
+  rect(barX, barY, barW, barH, 6);
+
+  float pct = health / (float)maxHealth;
+  pct = constrain(pct, 0, 1);
+
+  fill(255, 80, 80, 200);
+  rect(barX, barY, barW * pct, barH, 6);
+
+  fill(255);
+  textSize(18);
+  text(health + " / " + maxHealth, barX, barY + 26);
+}
+
+void drawBattleOverlay() {
+  fill(255, 230);
+  textAlign(LEFT, TOP);
+  textSize(20);
+  text("Destroyed: " + destroyedOrbs + " / " + destroyGoal, 40, 40);
+  text("Type the orb's letter to dispel it", 40, 66);
+}
+
+void drawHitFlash() {
+  if (hitFlashStart == 0) return;
+  int elapsed = millis() - hitFlashStart;
+  if (elapsed > hitFlashDuration) return;
+
+  float alpha = map(elapsed, 0, hitFlashDuration, 140, 0);
+  noStroke();
+  fill(255, 0, 0, alpha);
+  rect(0, 0, width, height);
 }
