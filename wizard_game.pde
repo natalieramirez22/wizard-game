@@ -20,9 +20,22 @@ boolean mouseWasOverCat = false;
 int catHoverCooldownMs = 600;
 int lastCatHoverReactTime = -99999;
 
+// spell test (storyState 1)
+boolean spellStarted = false;
+boolean spellFinished = false;
+boolean spellPassed = false;
+ArrayList<PVector> runePoints = new ArrayList<PVector>(); // target path
+ArrayList<PVector> playerTrace = new ArrayList<PVector>(); // what player drew
+int runeIndex = 0;
+float traceTolerance = 50;
+int spellTimeLimitMs = 12000;
+int spellStartTime = 0;
+int traceHits = 0;
+int traceChecks = 0;
+float passPercent = 0.72; // 72% accuracy to pass
+
 // battle (storyState 3)
 ArrayList<SpellOrb> orbs = new ArrayList<SpellOrb>();
-
 int health = 5;
 int maxHealth = 5;
 int destroyedOrbs = 0;
@@ -46,13 +59,8 @@ String[] introLines = {
 };
 
 String[] levelUpLines = {
-  "Spell test scene result goes here (pass/fail)",
-  "If they pass, we move on to the battle!"
-};
-
-String[] endingLines = {
-  "Final scene: you passed! (replace later)",
-  "Final scene: you failed... (replace later)"
+  "You're on the right path, apprentice...",
+  "Let's test your strength in a final test."
 };
 
 // flash vars
@@ -87,7 +95,7 @@ void setup() {
   professor = new Wizard(
     "Professor",
     profSprite,
-    width/2 + 250,
+    width/2 + 225,
     height * 0.62,
     height/3
     );
@@ -95,17 +103,15 @@ void setup() {
   apprentice = new Wizard(
     "Apprentice",
     studentSprite,
-    200,
-    height * 0.66,
+    225,
+    height * 0.62,
     height/2
     );
 
-  // player stats (used in storyState 1 and 3)
-  apprentice.mana = 100;
-  apprentice.maxMana = 100;
-
   // cat NPC (only shown in storyState 0,2,4)
   cat = new CatNPC(catSprite, width * 0.55, height * 0.72);
+
+  buildRune();
 }
 
 // draw
@@ -128,8 +134,12 @@ void draw() {
   // storyState 1: spell test scene (apprentice only + stats)
   else if (storyState == 1) {
     apprentice.display();
-    apprentice.drawStatusPanel();   // player UI only here
-    drawDialogueForState1();
+    
+    if (!spellStarted) {
+      drawDialogue("Spell Test: Trace the rune and get over 72% accuracy.\nHold the mouse to draw before the timer runs out."); 
+    } else {
+      runSpellTest(); 
+    }
   }
 
   // storyState 2: back to school, all characters, level up dialogue
@@ -141,7 +151,12 @@ void draw() {
     cat.display();
     handleCatHoverReaction();
 
-    levelUpScene();
+    if (spellPassed) {
+      levelUpScene();
+    } else {
+      drawDialogue("Try again...\nYou must master spells before advancing."); 
+      return;
+    }
   }
 
   // storyState 3: battle scene (apprentice only + stats)
@@ -192,11 +207,6 @@ void initialScene() {
   if (dialogueIndex < introLines.length) {
     drawDialogue(introLines[dialogueIndex]);
   }
-}
-
-void drawDialogueForState1() {
-  // placeholder until your spell test game exists
-  drawDialogue("Spell Test (game goes here). Click to continue for now.");
 }
 
 void levelUpScene() {
@@ -289,11 +299,21 @@ void mousePressed() {
       dialogueIndex = 0;
     }
   } else if (storyState == 1) {
-    // for now, click moves to level-up dialogue scene
-    storyState = 2;
-    triggerFlash();
-    dialogueIndex = 0;
+    if (!spellStarted) {
+      startSpellTest();
+      return;
+    }
+    if (spellFinished) {
+      storyState = 2;
+      triggerFlash();
+      dialogueIndex = 0;
+      return;
+    }
+    return;
   } else if (storyState == 2) {
+    if (!spellPassed) {
+      return;
+    }
     dialogueIndex++;
     if (dialogueIndex >= levelUpLines.length) {
       storyState = 3;
@@ -309,9 +329,7 @@ void mousePressed() {
         startBattle(); 
       }
     }
-    return; // prevent advancing to storyState 4 on click
-  } else if (storyState == 4) {
-    // final scene: you can later lock this or restart
+    return;
   }
 }
 
@@ -339,6 +357,28 @@ void keyPressed() {
   }
 }
 
+void mouseDragged() {
+  if (storyState != 1 || !spellStarted || spellFinished) return;
+
+  // record trace (skip if too dense)
+  if (playerTrace.size() == 0 || dist(mouseX, mouseY, playerTrace.get(playerTrace.size()-1).x, playerTrace.get(playerTrace.size()-1).y) > 6) {
+    playerTrace.add(new PVector(mouseX, mouseY));
+  }
+
+  // score against the next rune point (prevents random scribbling)
+  PVector target = runePoints.get(constrain(runeIndex, 0, runePoints.size()-1));
+  float d = dist(mouseX, mouseY, target.x, target.y);
+
+  traceChecks++;
+  if (d <= traceTolerance) {
+    traceHits++;
+    // progress forward only when you're close enough
+    runeIndex++;
+  } else {
+    // small penalty: allow tiny backtracking so it feels responsive
+    runeIndex = max(0, runeIndex - 1);
+  }
+}
 
 // more helpers
 void skipTyping() {
@@ -347,19 +387,14 @@ void skipTyping() {
 }
 
 void handleCatHoverReaction() {
-  // only allow hover interaction in states where the cat exists
   if (!(storyState == 0 || storyState == 2 || storyState == 4)) return;
 
   boolean mouseOverCat = cat.isMouseOver();
-
-  // trigger only when mouse ENTERS the cat area (not every frame)
   boolean mouseJustEntered = mouseOverCat && !mouseWasOverCat;
-
-  // optional cooldown so repeated in/out doesn't spam
   boolean cooldownDone = (millis() - lastCatHoverReactTime) > catHoverCooldownMs;
 
   if (mouseJustEntered && cooldownDone) {
-    cat.reactToHover(); // <- you’ll add this method in CatNPC
+    cat.reactToHover();
     lastCatHoverReactTime = millis();
   }
 
@@ -493,4 +528,124 @@ void drawHitFlash() {
   noStroke();
   fill(255, 0, 0, alpha);
   rect(0, 0, width, height);
+}
+
+void buildRune() {
+  runePoints.clear();
+
+  float cx = width * 0.55;
+  float cy = height * 0.45;
+
+  float radius = min(width, height) * 0.18;
+  float angle = -PI/2;
+
+  for (int i = 0; i < 220; i++) {
+    float t = i / 220.0;
+    float r = lerp(radius, radius * 0.35, t);
+    float a = angle + t * TWO_PI * 1.6; // ~1.6 turns
+
+    float x = cx + cos(a) * r;
+    float y = cy + sin(a) * r;
+
+    runePoints.add(new PVector(x, y));
+  }
+
+  PVector end = runePoints.get(runePoints.size()-1);
+  for (int i = 0; i < 50; i++) {
+    runePoints.add(new PVector(end.x + i*3.2, end.y - i*1.2));
+  }
+}
+
+void startSpellTest() {
+  spellStarted = true;
+  spellFinished = false;
+  spellPassed = false;
+
+  playerTrace.clear();
+  runeIndex = 0;
+
+  traceHits = 0;
+  traceChecks = 0;
+
+  spellStartTime = millis();
+}
+
+void runSpellTest() {
+  drawRuneTarget();
+  drawPlayerTrace();
+
+  // time left
+  int elapsed = millis() - spellStartTime;
+  int timeLeft = max(0, (spellTimeLimitMs - elapsed) / 1000);
+
+  fill(255);
+  textAlign(LEFT, TOP);
+  textSize(22);
+  text("Time: " + timeLeft, 40, 40);
+
+  // live accuracy
+  float acc = (traceChecks == 0) ? 0 : (traceHits / (float)traceChecks);
+  text("Accuracy: " + int(acc * 100) + "%", 40, 66);
+
+  // finish conditions
+  if (!spellFinished) {
+    // pass if you reach near the end of the rune
+    if (runeIndex >= runePoints.size() - 15) {
+      finishSpellTest(true);
+    }
+
+    // fail if time runs out
+    if (elapsed > spellTimeLimitMs) {
+      finishSpellTest(false);
+    }
+  }
+
+  // end message overlay
+  if (spellFinished) {
+    if (spellPassed) {
+      drawDialogue("Spell complete.\nYou passed.");
+    } else {
+      drawDialogue("Your rune fizzles...\nYou failed.");
+    }
+  }
+}
+
+void finishSpellTest(boolean reachedEnd) {
+  spellFinished = true;
+
+  float acc = (traceChecks == 0) ? 0 : (traceHits / (float)traceChecks);
+  spellPassed = reachedEnd && (acc >= passPercent);
+}
+
+void drawRuneTarget() {
+  // draw target path as glowing dots/line
+  noFill();
+  stroke(180, 220);
+  strokeWeight(10);
+
+  beginShape();
+  for (PVector p : runePoints) {
+    vertex(p.x, p.y);
+  }
+  endShape();
+
+  // highlight the current "goal" point
+  PVector g = runePoints.get(constrain(runeIndex, 0, runePoints.size()-1));
+  noStroke();
+  fill(255, 255, 255, 180);
+  ellipse(g.x, g.y, 18, 18);
+}
+
+void drawPlayerTrace() {
+  if (playerTrace.size() < 2) return;
+
+  noFill();
+  stroke(255);
+  strokeWeight(6);
+
+  beginShape();
+  for (PVector p : playerTrace) {
+    vertex(p.x, p.y);
+  }
+  endShape();
 }

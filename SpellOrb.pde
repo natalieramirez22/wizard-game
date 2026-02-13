@@ -1,3 +1,5 @@
+// SpellOrb class for Hackathon Wizard game
+
 class SpellOrb {
   PImage sprite;
   char letter;
