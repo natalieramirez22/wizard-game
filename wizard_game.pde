@@ -85,13 +85,13 @@ void setup() {
   if (spellBg  != null) spellBg.resize(width, height);
   if (battleBg != null) battleBg.resize(width, height);
 
-  // sprites (loaded once; passed into objects)
+  // sprites
   profSprite = loadImage("wizard_professor.png");
   studentSprite = loadImage("apprentice.png");
-  catSprite = loadImage("cat.png"); // make sure cat.png exists
+  catSprite = loadImage("cat.png");
   orbSprite = loadImage("dark_orb.png");
 
-  // create wizard objects
+  // create class objects
   professor = new Wizard(
     "Professor",
     profSprite,
@@ -108,7 +108,6 @@ void setup() {
     height/2
     );
 
-  // cat NPC (only shown in storyState 0,2,4)
   cat = new CatNPC(catSprite, width * 0.55, height * 0.72);
 
   buildRune();
@@ -188,7 +187,7 @@ void draw() {
 
 // background draw
 void drawSceneBackground() {
-  imageMode(CORNER); // critical: backgrounds must use CORNER
+  imageMode(CORNER);
 
   if (storyState == 1) {
     if (spellBg != null) image(spellBg, 0, 0, width, height);
@@ -290,7 +289,6 @@ void mousePressed() {
     return;
   }
 
-  // advance story logic (keeps your original feel, just aligned to your new states)
   if (storyState == 0) {
     dialogueIndex++;
     if (dialogueIndex >= introLines.length) {
@@ -360,12 +358,11 @@ void keyPressed() {
 void mouseDragged() {
   if (storyState != 1 || !spellStarted || spellFinished) return;
 
-  // record trace (skip if too dense)
   if (playerTrace.size() == 0 || dist(mouseX, mouseY, playerTrace.get(playerTrace.size()-1).x, playerTrace.get(playerTrace.size()-1).y) > 6) {
     playerTrace.add(new PVector(mouseX, mouseY));
   }
 
-  // score against the next rune point (prevents random scribbling)
+  // prevent random scribbling during the test
   PVector target = runePoints.get(constrain(runeIndex, 0, runePoints.size()-1));
   float d = dist(mouseX, mouseY, target.x, target.y);
 
@@ -375,7 +372,7 @@ void mouseDragged() {
     // progress forward only when you're close enough
     runeIndex++;
   } else {
-    // small penalty: allow tiny backtracking so it feels responsive
+    // allow a bit of backtracking so it feels responsive
     runeIndex = max(0, runeIndex - 1);
   }
 }
@@ -618,7 +615,6 @@ void finishSpellTest(boolean reachedEnd) {
 }
 
 void drawRuneTarget() {
-  // draw target path as glowing dots/line
   noFill();
   stroke(180, 220);
   strokeWeight(10);
@@ -629,7 +625,7 @@ void drawRuneTarget() {
   }
   endShape();
 
-  // highlight the current "goal" point
+  // highlight the current goal point
   PVector g = runePoints.get(constrain(runeIndex, 0, runePoints.size()-1));
   noStroke();
   fill(255, 255, 255, 180);
