@@ -1,4 +1,26 @@
 // Wizard Video Game for Processing Hackathon
+/*
+  Wizard Game — Rules and Implementation Summary
+
+  This game uses a storyState variable to control scene/story progress:
+  intro -> spell test -> level up -> final battle -> ending.
+
+  Spell Test:
+  The player traces a rune with the mouse before time runs out. Mouse movement is compared
+  to predefined runePoints, and accuracy is calculated using traceHits / traceChecks.
+  The player passes only if they reach the end of the rune AND accuracy ≥ 72%.
+  If they fail, progression is blocked and they cannot advance to the battle.
+
+  Final Battle:
+  SpellOrb objects spawn and move toward the player. Each orb has a letter, and the player
+  must press the matching key to destroy it. If an orb reaches the player, health decreases.
+  The player wins by destroying enough orbs, or loses if health reaches zero.
+
+  Supporting classes (Wizard, CatNPC, SpellOrb) handle character display, NPC behavior,
+  and orb movement. State transitions and rules are enforced through conditions in draw(),
+  mousePressed(), keyPressed(), and runBattleGame().
+*/
+
 
 // images
 PImage schoolBg, spellBg, battleBg;
